@@ -2,8 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Clock, MapPin, Wrench, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useAuthStore } from '../store/authStore';
 
 export const Home: React.FC = () => {
+  const { isAuthenticated } = useAuthStore();
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
@@ -31,13 +33,13 @@ export const Home: React.FC = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
-                to="/service-request"
+                to={isAuthenticated ? "/service-request" : "/login"}
                 className="bg-primary-600 text-white hover:bg-primary-700 px-8 py-4 rounded-md text-lg font-semibold text-center transition-all shadow-lg hover:shadow-primary-500/30"
               >
                 Request Assistance Now
               </Link>
               <Link
-                to="/register"
+                to="/mechanic/register"
                 className="bg-white text-gray-900 hover:bg-gray-100 px-8 py-4 rounded-md text-lg font-semibold text-center transition-all"
               >
                 Join as Mechanic
@@ -116,7 +118,7 @@ export const Home: React.FC = () => {
             Join thousands of satisfied users who trust ResQride for their roadside assistance needs.
           </p>
           <Link
-            to="/register"
+            to="/mechanic/register"
             className="bg-white text-primary-700 hover:bg-gray-100 px-8 py-3 rounded-md text-lg font-semibold shadow-md transition-colors inline-block"
           >
             Create Your Account

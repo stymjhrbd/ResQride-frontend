@@ -26,10 +26,42 @@ export const Navbar: React.FC = () => {
           </div>
 
           <div className="hidden sm:ml-6 sm:flex sm:items-center sm:space-x-8">
-            <Link to="/" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              Home
-            </Link>
-            {isAuthenticated ? (
+            {!(isAuthenticated && (user?.role === 'ADMIN' || user?.role === 'MECHANIC')) && (
+              <Link to="/" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                Home
+              </Link>
+            )}
+            {isAuthenticated && user?.role === 'ADMIN' ? (
+              <>
+                <Link to="/admin" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                  Admin
+                </Link>
+                <div className="relative ml-3 flex items-center gap-4">
+                  <span className="text-sm text-gray-700">Hi, {user?.name || 'Admin'}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none"
+                  >
+                    <LogOut className="h-6 w-6" />
+                  </button>
+                </div>
+              </>
+            ) : isAuthenticated && user?.role === 'MECHANIC' ? (
+              <>
+                <Link to="/mechanic" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                  Mechanic
+                </Link>
+                <div className="relative ml-3 flex items-center gap-4">
+                  <span className="text-sm text-gray-700">Hi, {user?.name || 'Mechanic'}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none"
+                  >
+                    <LogOut className="h-6 w-6" />
+                  </button>
+                </div>
+              </>
+            ) : isAuthenticated ? (
               <>
                 <Link to="/dashboard" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
                   Dashboard
@@ -84,21 +116,33 @@ export const Navbar: React.FC = () => {
           >
             Home
           </Link>
-          {isAuthenticated ? (
+          {isAuthenticated && user?.role === 'ADMIN' ? (
             <>
               <Link
-                to="/dashboard"
+                to="/admin"
                 className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
                 onClick={() => setIsOpen(false)}
               >
-                Dashboard
+                Admin
               </Link>
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setIsOpen(false);
+                }}
+                className="block w-full text-left pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
+              >
+                Logout
+              </button>
+            </>
+          ) : isAuthenticated && user?.role === 'MECHANIC' ? (
+            <>
               <Link
-                to="/service-request"
+                to="/mechanic"
                 className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
                 onClick={() => setIsOpen(false)}
               >
-                Request Service
+                Mechanic
               </Link>
               <button
                 onClick={() => {
@@ -112,20 +156,50 @@ export const Navbar: React.FC = () => {
             </>
           ) : (
             <>
-              <Link
-                to="/login"
-                className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
-                onClick={() => setIsOpen(false)}
-              >
-                Login
-              </Link>
-              <Link
-                to="/register"
-                className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-primary-600 hover:bg-gray-50 hover:border-primary-300 hover:text-primary-700"
-                onClick={() => setIsOpen(false)}
-              >
-                Register
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link
+                    to="/dashboard"
+                    className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
+                    to="/service-request"
+                    className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Request Service
+                  </Link>
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setIsOpen(false);
+                    }}
+                    className="block w-full text-left pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-primary-600 hover:bg-gray-50 hover:border-primary-300 hover:text-primary-700"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Register
+                  </Link>
+                </>
+              )}
             </>
           )}
         </div>

@@ -54,7 +54,13 @@ export const Login: React.FC = () => {
       );
       
       toast.success('Logged in successfully!');
-      navigate('/dashboard');
+      if (decoded.role === 'ADMIN') {
+        navigate('/admin');
+      } else if (decoded.role === 'MECHANIC') {
+        navigate('/mechanic');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       console.error('Login failed:', error);
       toast.error(error.response?.data?.message || 'Invalid email or password');
