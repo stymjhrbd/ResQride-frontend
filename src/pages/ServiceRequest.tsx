@@ -14,8 +14,16 @@ import apiClient from '../api/client';
 const serviceRequestSchema = z.object({
   location: z.string().min(5, 'Please enter a valid location'),
   problemType: z.string().min(1, 'Please select a problem type'),
-  amount: z.coerce.number().min(0, 'Amount must be non-negative'),
 });
+
+const SERVICE_PRICES: Record<string, number> = {
+  'TOWING': 1500.00,
+  'TIRE_CHANGE': 800.00,
+  'BATTERY': 3000.00,
+  'FUEL': 600.00,
+  'LOCKOUT': 300.00,
+  'MECHANIC': 1500.00
+};
 
 export const ServiceRequest: React.FC = () => {
   const { register, handleSubmit, formState: { errors } } = useForm({
@@ -36,10 +44,12 @@ export const ServiceRequest: React.FC = () => {
     setIsLoading(true);
     try {
       const parsed = serviceRequestSchema.parse(data);
+      const amount = SERVICE_PRICES[parsed.problemType] || 0;
+
       await apiClient.post('/requests', {
         location: parsed.location,
         problemType: parsed.problemType,
-        amount: parsed.amount,
+        amount: amount,
       });
 
       toast.success('Service request submitted successfully! Searching for mechanics...');
@@ -72,12 +82,12 @@ export const ServiceRequest: React.FC = () => {
                 className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md border"
               >
                 <option value="">Select a service...</option>
-                <option value="TOWING">Towing</option>
-                <option value="TIRE_CHANGE">Flat Tire Change</option>
-                <option value="BATTERY">Battery Jump Start</option>
-                <option value="FUEL">Fuel Delivery</option>
-                <option value="LOCKOUT">Lockout</option>
-                <option value="MECHANIC">General Mechanic</option>
+                <option value="TOWING">Towing (₹1500)</option>
+                <option value="TIRE_CHANGE">Flat Tire Change (₹800)</option>
+                <option value="BATTERY">Battery Jump Start (₹3000)</option>
+                <option value="FUEL">Fuel Delivery (₹600)</option>
+                <option value="LOCKOUT">Lockout (₹300)</option>
+                <option value="MECHANIC">General Mechanic (₹1500)</option>
               </select>
               {errors.problemType && (
                 <p className="text-red-500 text-xs mt-1">{errors.problemType.message}</p>
@@ -97,21 +107,6 @@ export const ServiceRequest: React.FC = () => {
               </div>
               {errors.location && (
                 <p className="text-red-500 text-xs mt-1">{errors.location.message}</p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="amount">Estimated Amount</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                {...register('amount')}
-                className={errors.amount ? 'border-red-500' : ''}
-              />
-              {errors.amount && (
-                <p className="text-red-500 text-xs mt-1">{errors.amount.message}</p>
               )}
             </div>
           </div>

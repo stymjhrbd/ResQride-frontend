@@ -8,13 +8,17 @@ import { Dashboard } from './pages/Dashboard';
 import { ServiceRequest } from './pages/ServiceRequest';
 import { Services } from './pages/Services';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { AdminMechanics } from './pages/AdminMechanics';
 import { MechanicDashboard } from './pages/MechanicDashboard';
 import { useAuthStore } from './store/authStore';
 
 function DashboardRoute() {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
+
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (user?.role === 'MECHANIC') return <Navigate to="/mechanic" replace />;
   if (user?.role === 'ADMIN') return <Navigate to="/admin" replace />;
+
   return <Dashboard />;
 }
 
@@ -31,6 +35,7 @@ function App() {
           <Route path="service-request" element={<ServiceRequest />} />
           <Route path="services" element={<Services />} />
           <Route path="admin" element={<AdminDashboard />} />
+          <Route path="admin/mechanics" element={<AdminMechanics />} />
           <Route path="mechanic" element={<MechanicDashboard />} />
         </Route>
       </Routes>

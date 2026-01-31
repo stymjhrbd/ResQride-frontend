@@ -19,6 +19,7 @@ export const MechanicDashboard: React.FC = () => {
     const { isAuthenticated, user } = useAuthStore();
     const navigate = useNavigate();
     const [jobs, setJobs] = useState<AssignedJob[]>([]);
+    const [availability, setAvailability] = useState<string>('OFFLINE');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -29,10 +30,18 @@ export const MechanicDashboard: React.FC = () => {
         }
         const fetchJobs = async () => {
             try {
-                const res = await apiClient.get('/mechanics/my-requests');
-                setJobs(res.data);
+                const [jobsRes, meRes] = await Promise.all([
+                    apiClient.get('/mechanics/my-requests'),
+                    apiClient.get('/mechanics/me').catch(() => ({ data: { availability: 'UNKNOWN' } })) // Fallback
+                ]);
+                // Sort jobs by ID (descending)
+                const sortedJobs = Array.isArray(jobsRes.data) ? jobsRes.data.sort((a: AssignedJob, b: AssignedJob) => b.requestId - a.requestId) : [];
+                setJobs(sortedJobs);
+                if (meRes.data.availability) {
+                    setAvailability(meRes.data.availability);
+                }
             } catch {
-                setError('Failed to load assigned jobs');
+                setError('Failed to load dashboard data');
             } finally {
                 setIsLoading(false);
             }
@@ -40,15 +49,33 @@ export const MechanicDashboard: React.FC = () => {
         fetchJobs();
     }, [isAuthenticated, user, navigate]);
 
+    const updateAvailability = async (status: string) => {
+        try {
+            await apiClient.patch(`/mechanics/availability?status=${status}`);
+            setAvailability(status);
+        } catch {
+            // setError('Failed to update availability'); // Optional: show toast instead
+            console.error('Failed to update availability');
+        }
+    };
+
     const completeJob = async (id: number) => {
         try {
-            await apiClient.patch(`/requests/${id}/status?status=COMPLETED`);
+            // Update status to PAYMENT_PENDING instead of COMPLETED
+            await apiClient.patch(`/requests/${id}/status?status=PAYMENT_PENDING`);
             const updated = jobs.map(j =>
-                j.requestId === id ? { ...j, status: 'COMPLETED' } : j
+                j.requestId === id ? { ...j, status: 'PAYMENT_PENDING' } : j
             );
             setJobs(updated);
+
+            // Availability is NOT updated here, it stays BUSY until payment is done (or mechanic manually updates it)
+            // Or if you prefer, mechanic becomes AVAILABLE now waiting for payment.
+            // Requirement says "after clicking on pay ... i want complete status".
+            // So mechanic sets it to PAYMENT_PENDING.
+
+            updateAvailability('AVAILABLE'); // Mechanic is free technically, just waiting for payment
         } catch {
-            setError('Failed to complete job');
+            setError('Failed to update job status');
         }
     };
 
@@ -82,6 +109,22 @@ export const MechanicDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-2xl font-bold text-gray-900">Mechanic Dashboard</h1>
+
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">Status:</span>
+                    <select
+                        value={availability}
+                        onChange={(e) => updateAvailability(e.target.value)}
+                        className={`text-sm font-semibold py-1 px-3 rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${availability === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
+                            availability === 'BUSY' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                            }`}
+                    >
+                        <option value="AVAILABLE" className="bg-white text-gray-900">Available</option>
+                        <option value="BUSY" className="bg-white text-gray-900">Busy</option>
+                        <option value="OFFLINE" className="bg-white text-gray-900">Offline</option>
+                    </select>
+                </div>
             </div>
 
             <div className="bg-white shadow-sm border border-gray-100 rounded-lg overflow-hidden">

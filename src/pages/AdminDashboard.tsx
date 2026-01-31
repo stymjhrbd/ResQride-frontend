@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { MapPin, Loader2, Eye, X } from 'lucide-react';
+import { MapPin, Loader2, Eye, X, Users } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/authStore';
 
@@ -13,11 +13,17 @@ interface RequestItem {
   status: string;
   createdAt?: string;
   mechanic?: { id: number; name: string } | null;
+  mechanicId?: number;
+  mechanicName?: string;
 }
 
 interface Mechanic {
   id: number;
   name: string;
+  verified?: boolean;
+  availability?: string;
+  email?: string;
+  phone?: string;
 }
 
 export const AdminDashboard: React.FC = () => {
@@ -41,12 +47,18 @@ export const AdminDashboard: React.FC = () => {
     }
     const fetchData = async () => {
       try {
+        // Fetch pending requests and available mechanics
         const [reqRes, mechRes] = await Promise.all([
           apiClient.get('/admin/requests'),
           apiClient.get('/admin/mechanics/available'),
         ]);
-        setRequests(reqRes.data);
-        setMechanics(mechRes.data);
+        // Sort requests by ID (descending)
+        const sortedRequests = Array.isArray(reqRes.data) ? reqRes.data.sort((a: RequestItem, b: RequestItem) => b.requestId - a.requestId) : [];
+        setRequests(sortedRequests);
+
+        // Ensure mechanics is an array
+        const availableMechanics = Array.isArray(mechRes.data) ? mechRes.data : [];
+        setMechanics(availableMechanics);
       } catch (err) {
         setError('Failed to load admin data');
       } finally {
@@ -104,6 +116,17 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'PAYMENT_PENDING':
+        return 'Unassigned';
+      case 'CREATED':
+        return 'Unassigned';
+      default:
+        return status.replace('_', ' ');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-4rem)]">
@@ -133,6 +156,12 @@ export const AdminDashboard: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+        <Link to="/admin/mechanics">
+          <Button>
+            <Users className="mr-2 h-4 w-4" />
+            Manage Mechanics
+          </Button>
+        </Link>
       </div>
 
       <div className="bg-white shadow-sm border border-gray-100 rounded-lg overflow-hidden">
@@ -175,11 +204,11 @@ export const AdminDashboard: React.FC = () => {
                             ? 'bg-blue-100 text-blue-800'
                             : 'bg-yellow-100 text-yellow-800'
                         }`}>
-                        {r.status.replace('_', ' ')}
+                        {getStatusLabel(r.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {r.mechanic?.name || 'Unassigned'}
+                      {r.mechanic?.name || r.mechanicName || (r.mechanicId ? `Mechanic ID: ${r.mechanicId}` : 'Unassigned')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <div className="flex items-center gap-2">
