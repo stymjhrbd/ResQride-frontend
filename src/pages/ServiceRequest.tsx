@@ -5,11 +5,11 @@ import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Loader2, MapPin } from 'lucide-react';
 import { toast } from 'react-toastify';
 import apiClient from '../api/client';
+import { MapplsLocationInput } from '../components/MapplsLocationInput';
 
 const serviceRequestSchema = z.object({
   location: z.string().min(5, 'Please enter a valid location'),
@@ -26,10 +26,11 @@ const SERVICE_PRICES: Record<string, number> = {
 };
 
 export const ServiceRequest: React.FC = () => {
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(serviceRequestSchema),
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
 
@@ -39,6 +40,48 @@ export const ServiceRequest: React.FC = () => {
       navigate('/login');
     }
   }, [isAuthenticated, navigate]);
+
+  const handleLocationClick = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          // Use OpenStreetMap Nominatim for reverse geocoding (free, no key required)
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+
+          if (data && data.display_name) {
+            setValue('location', data.display_name);
+            toast.success('Location detected successfully');
+          } else {
+            // Fallback to coordinates if address not found
+            setValue('location', `${latitude}, ${longitude}`);
+            toast.success('Location coordinates detected');
+          }
+        } catch (error) {
+          console.error('Geocoding error:', error);
+          // Fallback to coordinates on network error
+          setValue('location', `${latitude}, ${longitude}`);
+          toast.warning('Could not fetch address, using coordinates');
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        toast.error('Unable to retrieve your location');
+        setIsLocating(false);
+      }
+    );
+  };
 
   const onSubmit = async (data: unknown) => {
     setIsLoading(true);
@@ -95,15 +138,35 @@ export const ServiceRequest: React.FC = () => {
             </div>
 
             <div>
-              <Label htmlFor="location">Current Location</Label>
+              <div className="flex justify-between items-center mb-1">
+                <Label htmlFor="location">Current Location</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLocationClick}
+                  disabled={isLocating}
+                  className="text-primary-600 hover:text-primary-700 h-8 px-2"
+                >
+                  {isLocating ? (
+                    <>
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Locating...
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="h-3 w-3 mr-1" />
+                      Use Current Location
+                    </>
+                  )}
+                </Button>
+              </div>
               <div className="relative">
-                <Input
-                  id="location"
-                  placeholder="e.g., 123 Highway 101, Near Exit 5"
-                  {...register('location')}
+                <MapplsLocationInput
                   className={errors.location ? 'border-red-500 pl-10' : 'pl-10'}
+                  onLocationSelect={(loc) => setValue('location', loc)}
                 />
-                <MapPin className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <MapPin className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none z-10" />
               </div>
               {errors.location && (
                 <p className="text-red-500 text-xs mt-1">{errors.location.message}</p>

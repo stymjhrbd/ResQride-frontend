@@ -189,18 +189,44 @@ export const Dashboard: React.FC = () => {
   };
 
   const generateReceipt = (request: ServiceRequest) => {
-    // Simple text receipt for now, or open a new window with details
+    const transactionId = `T${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 1000)}`;
+    const date = new Date().toLocaleDateString('en-IN', {
+      year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+
     const receiptContent = `
-      RESQRIDE RECEIPT
-      ----------------
-      Date: ${new Date().toLocaleDateString()}
-      Request ID: ${request.requestId}
-      Service: ${getProblemTypeLabel(request.problemType)}
-      Mechanic: ${request.mechanicName || 'Assigned Mechanic'}
-      Amount Paid: ₹${request.amount}
-      Status: PAID
-      ----------------
-      Thank you for using ResQride!
+    ================================================
+                  RESQRIDE SERVICE RECEIPT
+    ================================================
+    
+    Receipt No     : ${transactionId}
+    Date           : ${date}
+    
+    ------------------------------------------------
+    CUSTOMER DETAILS
+    ------------------------------------------------
+    Request ID     : #${request.requestId}
+    Location       : ${request.location}
+    
+    ------------------------------------------------
+    SERVICE DETAILS
+    ------------------------------------------------
+    Service Type   : ${getProblemTypeLabel(request.problemType)}
+    Mechanic       : ${request.mechanicName || 'Assigned Mechanic'}
+    Mechanic ID    : ${request.mechanicId || 'N/A'}
+    
+    ------------------------------------------------
+    PAYMENT SUMMARY
+    ------------------------------------------------
+    Total Amount   : ₹${request.amount.toLocaleString('en-IN')}
+    Payment Status : PAID
+    Transaction ID : ${transactionId}
+    
+    ================================================
+    Thank you for choosing ResQride!
+    For support: support@resqride.com
+    ================================================
     `;
 
     // Create a blob and download it
@@ -208,10 +234,10 @@ export const Dashboard: React.FC = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `receipt_${request.requestId}.txt`;
+    a.download = `ResQride_Receipt_${transactionId}.txt`;
     a.click();
     window.URL.revokeObjectURL(url);
-    toast.info('Receipt downloaded');
+    toast.info('Receipt downloaded successfully');
   };
 
   const getStatusLabel = (status: string) => {

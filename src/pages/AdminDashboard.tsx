@@ -24,6 +24,8 @@ interface Mechanic {
   availability?: string;
   email?: string;
   phone?: string;
+  rating?: number;
+  skillType?: string;
 }
 
 export const AdminDashboard: React.FC = () => {
@@ -31,6 +33,7 @@ export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
+  const [skilledMechanics, setSkilledMechanics] = useState<Record<string, Mechanic[]>>({});
   const [assigningId, setAssigningId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +42,18 @@ export const AdminDashboard: React.FC = () => {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackMechanic, setFeedbackMechanic] = useState<Mechanic | null>(null);
   const [feedbackItems, setFeedbackItems] = useState<Array<{ id?: number; rating?: number; comment?: string; createdAt?: string }>>([]);
+
+  const mapProblemTypeToSkill = (problemType: string): string => {
+    switch (problemType) {
+      case 'TOWING': return 'TOWING';
+      case 'TIRE_CHANGE': return 'TIRE_SPECIALIST';
+      case 'BATTERY': return 'BATTERY_EXPERT';
+      case 'LOCKOUT': return 'LOCKSMITH';
+      case 'MECHANIC': return 'GENERAL_MECHANIC';
+      case 'FUEL': return 'GENERAL_MECHANIC'; // Assuming general mechanics handle fuel
+      default: return problemType;
+    }
+  };
 
   useEffect(() => {
     if (!isAuthenticated || user?.role !== 'ADMIN') {
@@ -59,6 +74,27 @@ export const AdminDashboard: React.FC = () => {
         // Ensure mechanics is an array
         const availableMechanics = Array.isArray(mechRes.data) ? mechRes.data : [];
         setMechanics(availableMechanics);
+
+        // Fetch mechanics by skill for each unique problem type
+        const uniqueProblemTypes = Array.from(new Set(sortedRequests.map((r: RequestItem) => r.problemType)));
+        const skillMap: Record<string, Mechanic[]> = {};
+
+        await Promise.all(uniqueProblemTypes.map(async (type) => {
+          try {
+            if (!type) return;
+            const skill = mapProblemTypeToSkill(type);
+            // Using the requested endpoint structure: /skill/{skill}
+            const res = await apiClient.get(`/admin/mechanics/available/skill/${skill}`);
+            skillMap[type] = Array.isArray(res.data) ? res.data : [];
+          } catch (e) {
+            console.warn(`Failed to fetch mechanics for skill: ${type}`, e);
+            // Fallback: Filter client-side from all available mechanics if backend endpoint fails
+            const skill = mapProblemTypeToSkill(type);
+            skillMap[type] = availableMechanics.filter(m => m.skillType === skill);
+          }
+        }));
+        setSkilledMechanics(skillMap);
+
       } catch (err) {
         setError('Failed to load admin data');
       } finally {
@@ -213,16 +249,22 @@ export const AdminDashboard: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <div className="flex items-center gap-2">
                         <select
-                          className="border rounded-md px-2 py-1 text-sm"
+                          className="border rounded-md px-2 py-1 text-sm max-w-[200px]"
                           value={selection[r.requestId] || ''}
                           onChange={(e) =>
                             setSelection((prev) => ({ ...prev, [r.requestId]: Number(e.target.value) }))
                           }
                         >
                           <option value="">Select mechanic</option>
-                          {mechanics.map((m) => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
+                          {(skilledMechanics[r.problemType] || []).length > 0 ? (
+                            (skilledMechanics[r.problemType] || []).map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} ({m.rating ? `★${m.rating}` : 'New'})
+                              </option>
+                            ))
+                          ) : (
+                            <option disabled>No skilled mechanics available</option>
+                          )}
                         </select>
                         <Button
                           disabled={
