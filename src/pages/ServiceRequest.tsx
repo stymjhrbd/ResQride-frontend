@@ -14,6 +14,8 @@ import { MapplsLocationInput } from '../components/MapplsLocationInput';
 const serviceRequestSchema = z.object({
   location: z.string().min(5, 'Please enter a valid location'),
   problemType: z.string().min(1, 'Please select a problem type'),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 const SERVICE_PRICES: Record<string, number> = {
@@ -60,16 +62,22 @@ export const ServiceRequest: React.FC = () => {
 
           if (data && data.display_name) {
             setValue('location', data.display_name);
+            setValue('latitude', latitude);
+            setValue('longitude', longitude);
             toast.success('Location detected successfully');
           } else {
             // Fallback to coordinates if address not found
             setValue('location', `${latitude}, ${longitude}`);
+            setValue('latitude', latitude);
+            setValue('longitude', longitude);
             toast.success('Location coordinates detected');
           }
         } catch (error) {
           console.error('Geocoding error:', error);
           // Fallback to coordinates on network error
           setValue('location', `${latitude}, ${longitude}`);
+          setValue('latitude', latitude);
+          setValue('longitude', longitude);
           toast.warning('Could not fetch address, using coordinates');
         } finally {
           setIsLocating(false);
@@ -91,6 +99,8 @@ export const ServiceRequest: React.FC = () => {
 
       await apiClient.post('/requests', {
         location: parsed.location,
+        latitude: parsed.latitude,
+        longitude: parsed.longitude,
         problemType: parsed.problemType,
         amount: amount,
       });
@@ -164,7 +174,13 @@ export const ServiceRequest: React.FC = () => {
               <div className="relative">
                 <MapplsLocationInput
                   className={errors.location ? 'border-red-500 pl-10' : 'pl-10'}
-                  onLocationSelect={(loc) => setValue('location', loc)}
+                  onLocationSelect={(loc, coords) => {
+                    setValue('location', loc);
+                    if (coords) {
+                      setValue('latitude', coords.lat);
+                      setValue('longitude', coords.lng);
+                    }
+                  }}
                 />
                 <MapPin className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none z-10" />
               </div>

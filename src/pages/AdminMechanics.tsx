@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { Loader2, Eye, CheckCircle, XCircle, ArrowLeft, X } from 'lucide-react';
+import { Loader2, Eye, CheckCircle, XCircle, ArrowLeft, X, Building2 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/authStore';
 
@@ -13,6 +13,22 @@ interface Mechanic {
   verified: boolean;
   availability: string;
   skillType?: string;
+  center?: {
+    id: number;
+    name: string;
+    city: string;
+  } | null;
+  assignedCenter?: {
+    id: number;
+    name: string;
+    city: string;
+  } | null;
+}
+
+interface Center {
+  id: number;
+  name: string;
+  city: string;
 }
 
 interface Feedback {
@@ -29,12 +45,18 @@ export const AdminMechanics: React.FC = () => {
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Feedback Modal State
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [selectedMechanic, setSelectedMechanic] = useState<Mechanic | null>(null);
   const [feedbackItems, setFeedbackItems] = useState<Feedback[]>([]);
+
+  // Center Assignment State
+  const [centers, setCenters] = useState<Center[]>([]);
+  const [assignCenterOpen, setAssignCenterOpen] = useState(false);
+  const [assigningCenter, setAssigningCenter] = useState(false);
+  const [selectedCenterId, setSelectedCenterId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || user?.role !== 'ADMIN') {
@@ -42,7 +64,23 @@ export const AdminMechanics: React.FC = () => {
       return;
     }
     fetchMechanics();
+    fetchCenters();
   }, [isAuthenticated, user, navigate]);
+
+  const fetchCenters = async () => {
+    try {
+      const res = await apiClient.get('/centers');
+      setCenters(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      // Fallback
+      try {
+        const res2 = await apiClient.get('/admin/centers');
+        setCenters(Array.isArray(res2.data) ? res2.data : []);
+      } catch (e) {
+        console.warn('Failed to fetch centers:', e);
+      }
+    }
+  };
 
   const fetchMechanics = async () => {
     setIsLoading(true);
@@ -53,7 +91,11 @@ export const AdminMechanics: React.FC = () => {
       // Based on previous turn, I added a fallback in Dashboard, but here we expect it to exist or we use what we can.
       // If /admin/mechanics/all is the endpoint user specified:
       const response = await apiClient.get('/admin/mechanics/all');
-      setMechanics(Array.isArray(response.data) ? response.data : []);
+
+      // Ensure we map the response correctly if center is nested or structured differently
+      const mechanicsData = Array.isArray(response.data) ? response.data : [];
+      setMechanics(mechanicsData);
+
     } catch (err) {
       console.error('Failed to fetch mechanics:', err);
       setError('Failed to load mechanics data. Ensure backend endpoint /api/admin/mechanics/all exists.');
@@ -88,6 +130,37 @@ export const AdminMechanics: React.FC = () => {
     }
   };
 
+  const openAssignCenter = (mechanic: Mechanic) => {
+    setSelectedMechanic(mechanic);
+    // Use center OR assignedCenter
+    const center = mechanic.center || mechanic.assignedCenter;
+    setSelectedCenterId(center?.id || null);
+    setAssignCenterOpen(true);
+  };
+
+  const handleAssignCenter = async () => {
+    if (!selectedMechanic || !selectedCenterId) return;
+    setAssigningCenter(true);
+    try {
+      await apiClient.patch('/mechanics/assign-center', null, {
+        params: {
+          email: selectedMechanic.email,
+          centerId: selectedCenterId
+        }
+      });
+      // Refresh list
+      await fetchMechanics();
+      setAssignCenterOpen(false);
+      // alert('Center assigned successfully'); // Optional
+    } catch (err: any) {
+      console.error('Failed to assign center:', err);
+      // Show detailed error if available (e.g., "Slot full")
+      alert(err.response?.data?.message || 'Failed to assign center');
+    } finally {
+      setAssigningCenter(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-4rem)]">
@@ -119,6 +192,7 @@ export const AdminMechanics: React.FC = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mechanic Info</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skill</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Center</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Availability</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -143,6 +217,19 @@ export const AdminMechanics: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {mechanic.skillType || 'N/A'}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {(() => {
+                        const center = mechanic.center || mechanic.assignedCenter;
+                        return center ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium text-gray-900">{center.name}</span>
+                            <span className="text-xs">{center.city}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 italic">No Center</span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {mechanic.verified ? (
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
@@ -155,9 +242,8 @@ export const AdminMechanics: React.FC = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        mechanic.availability === 'AVAILABLE' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mechanic.availability === 'AVAILABLE' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
                         {mechanic.availability || 'UNKNOWN'}
                       </span>
                     </td>
@@ -167,6 +253,9 @@ export const AdminMechanics: React.FC = () => {
                           Verify
                         </Button>
                       )}
+                      <Button size="sm" variant="outline" onClick={() => openAssignCenter(mechanic)}>
+                        <Building2 className="h-4 w-4 mr-1" /> Center
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => openFeedback(mechanic)}>
                         <Eye className="h-4 w-4 mr-1" /> Feedback
                       </Button>
@@ -223,6 +312,56 @@ export const AdminMechanics: React.FC = () => {
             </div>
             <div className="p-4 border-t flex justify-end bg-gray-50 rounded-b-lg">
               <Button variant="outline" onClick={() => setFeedbackOpen(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Center Modal */}
+      {assignCenterOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-md rounded-lg shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">Assign Center</h3>
+              <button
+                className="p-2 rounded hover:bg-gray-100"
+                onClick={() => setAssignCenterOpen(false)}
+              >
+                <X className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="mb-4 text-sm text-gray-600">
+                Assign <strong>{selectedMechanic?.name}</strong> ({selectedMechanic?.skillType}) to a service center.
+              </p>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Center</label>
+                <select
+                  className="w-full border rounded-md p-2"
+                  value={selectedCenterId || ''}
+                  onChange={(e) => setSelectedCenterId(Number(e.target.value))}
+                >
+                  <option value="">-- No Center --</option>
+                  {centers.map(center => (
+                    <option key={center.id} value={center.id}>
+                      {center.name} ({center.city})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <Button variant="outline" onClick={() => setAssignCenterOpen(false)}>Cancel</Button>
+                <Button onClick={handleAssignCenter} disabled={assigningCenter}>
+                  {assigningCenter ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Assigning...
+                    </>
+                  ) : 'Save Assignment'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { MapPin, Loader2, Eye, X, Users } from 'lucide-react';
+import { MapPin, Loader2, Eye, X, Users, Building2 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/authStore';
 
 interface RequestItem {
   requestId: number;
   location: string;
+  latitude?: number;
+  longitude?: number;
   problemType: string;
   amount: number;
   status: string;
@@ -26,6 +28,7 @@ interface Mechanic {
   phone?: string;
   rating?: number;
   skillType?: string;
+  distance?: number;
 }
 
 export const AdminDashboard: React.FC = () => {
@@ -65,7 +68,11 @@ export const AdminDashboard: React.FC = () => {
         // Fetch pending requests and available mechanics
         const [reqRes, mechRes] = await Promise.all([
           apiClient.get('/admin/requests'),
-          apiClient.get('/admin/mechanics/available'),
+          apiClient.get('/admin/mechanics/available')
+            .catch(err => {
+              console.error("Mechanics fetch failed:", err.response?.status, err.response?.data);
+              return { data: [] };
+            }),
         ]);
         // Sort requests by ID (descending)
         const sortedRequests = Array.isArray(reqRes.data) ? reqRes.data.sort((a: RequestItem, b: RequestItem) => b.requestId - a.requestId) : [];
@@ -83,12 +90,40 @@ export const AdminDashboard: React.FC = () => {
           try {
             if (!type) return;
             const skill = mapProblemTypeToSkill(type);
-            // Using the requested endpoint structure: /skill/{skill}
-            const res = await apiClient.get(`/admin/mechanics/available/skill/${skill}`);
+
+            // Find requests of this type to get coordinates (assuming they are grouped or we take the first pending one)
+            // For a perfect match, we should fetch mechanics per request context, but for the dashboard overview,
+            // we will try to find a representative location or default to general availability.
+            // BETTER APPROACH: The dashboard shows a list of requests. When the user opens the dropdown for a SPECIFIC request,
+            // we should probably fetch the nearest mechanics for THAT request's location.
+            // However, to keep it simple and consistent with current architecture (bulk fetch),
+            // we will stick to the existing "all available" logic for now, but update the dropdown interaction later if needed.
+            // WAIT, the requirement is "Get nearest mechanics for admin... /nearest?lat=...".
+            // Since we display a list of requests, each request has a DIFFERENT location.
+            // So we cannot pre-fetch "nearest" mechanics globally unless we do it per request.
+
+            // STRATEGY CHANGE: We will fetch skilled mechanics as before (base pool).
+            // But for the "Selection" dropdown, we might want to sort them client-side if we have their locations,
+            // OR we trigger a specific fetch when the admin interacts.
+            // Given the current code pre-fetches everything:
+
+            // Let's stick to the existing endpoint for the bulk view to ensure the page loads fast.
+            // If we want "nearest", we really should do it per-request. 
+            // BUT, if the user wants to see "nearest" in the dropdown, we can update the code to fetch 
+            // specific nearest mechanics when the dropdown is clicked or for each request individually.
+
+            // For now, let's use the standard skill endpoint to populate the map.
+            // If we want to implement the "Nearest" feature strictly, we need to iterate through ALL requests
+            // and fetch nearest mechanics for EACH request. This might be heavy if there are many requests.
+
+            // Let's try to fetch nearest for the first request of this type as a sample, or just standard available.
+            // Since the user asked to "Update AdminDashboard to fetch and display nearest mechanics based on service request location",
+            // we should ideally do this per request row.
+
+            const res = await apiClient.get(`/admin/mechanics/available/skill/${skill}`).catch(() => ({ data: [] }));
             skillMap[type] = Array.isArray(res.data) ? res.data : [];
           } catch (e) {
             console.warn(`Failed to fetch mechanics for skill: ${type}`, e);
-            // Fallback: Filter client-side from all available mechanics if backend endpoint fails
             const skill = mapProblemTypeToSkill(type);
             skillMap[type] = availableMechanics.filter(m => m.skillType === skill);
           }
@@ -103,6 +138,80 @@ export const AdminDashboard: React.FC = () => {
     };
     fetchData();
   }, [isAuthenticated, user, navigate]);
+
+  // Fetch nearest mechanics for a specific request when the user interacts with it
+  const fetchNearestMechanics = async (request: RequestItem) => {
+    if (!request.latitude || !request.longitude) return;
+
+    try {
+      const skill = mapProblemTypeToSkill(request.problemType);
+
+      // Update to use the center-based nearest mechanic endpoint
+      // This endpoint considers the center's location for mechanics assigned to centers
+      const res = await apiClient.get(`/admin/mechanics/available/skill/${skill}/nearest/by-center`, {
+        params: {
+          latitude: request.latitude,
+          longitude: request.longitude
+        }
+      });
+
+      if (Array.isArray(res.data)) {
+        // Sort mechanics by distance in ascending order (nearest first)
+        // If distances are equal or null, sort by ID (ascending)
+        const sortedMechanics = res.data.sort((a: Mechanic, b: Mechanic) => {
+          // Handle null/undefined distances (put them last)
+          if (a.distance == null && b.distance == null) return a.id - b.id; // Sort by ID if both distances null
+          if (a.distance == null) return 1;
+          if (b.distance == null) return -1;
+
+          // If distances are equal (or very close), sort by ID
+          if (Math.abs(a.distance - b.distance) < 0.01) {
+            return a.id - b.id;
+          }
+
+          return a.distance - b.distance;
+        });
+
+        setSkilledMechanics(prev => ({
+          ...prev,
+          [`${request.problemType}_${request.requestId}`]: sortedMechanics
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to fetch nearest mechanics by center', e);
+      // Fallback to standard nearest if by-center fails (e.g. backend not updated yet)
+      try {
+        const skill = mapProblemTypeToSkill(request.problemType);
+        const resFallback = await apiClient.get(`/admin/mechanics/available/skill/${skill}/nearest`, {
+          params: {
+            latitude: request.latitude,
+            longitude: request.longitude
+          }
+        });
+        if (Array.isArray(resFallback.data)) {
+          // Sort fallback results too
+          const sortedFallback = resFallback.data.sort((a: Mechanic, b: Mechanic) => {
+            if (a.distance == null && b.distance == null) return a.id - b.id;
+            if (a.distance == null) return 1;
+            if (b.distance == null) return -1;
+
+            if (Math.abs(a.distance - b.distance) < 0.01) {
+              return a.id - b.id;
+            }
+
+            return a.distance - b.distance;
+          });
+
+          setSkilledMechanics(prev => ({
+            ...prev,
+            [`${request.problemType}_${request.requestId}`]: sortedFallback
+          }));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch nearest mechanics (fallback)', err);
+      }
+    }
+  };
 
   const assignRequest = async (requestId: number) => {
     const mechanicId = selection[requestId];
@@ -192,12 +301,20 @@ export const AdminDashboard: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-        <Link to="/admin/mechanics">
-          <Button>
-            <Users className="mr-2 h-4 w-4" />
-            Manage Mechanics
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <Link to="/admin/centers">
+            <Button variant="outline">
+              <Building2 className="mr-2 h-4 w-4" />
+              Service Centers
+            </Button>
+          </Link>
+          <Link to="/admin/mechanics">
+            <Button>
+              <Users className="mr-2 h-4 w-4" />
+              Manage Mechanics
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white shadow-sm border border-gray-100 rounded-lg overflow-hidden">
@@ -251,15 +368,19 @@ export const AdminDashboard: React.FC = () => {
                         <select
                           className="border rounded-md px-2 py-1 text-sm max-w-[200px]"
                           value={selection[r.requestId] || ''}
+                          onClick={() => fetchNearestMechanics(r)} // Fetch nearest on click
                           onChange={(e) =>
                             setSelection((prev) => ({ ...prev, [r.requestId]: Number(e.target.value) }))
                           }
                         >
                           <option value="">Select mechanic</option>
-                          {(skilledMechanics[r.problemType] || []).length > 0 ? (
-                            (skilledMechanics[r.problemType] || []).map((m) => (
+                          {/* Prefer mechanics specific to this request (nearest), otherwise fall back to generic skill list */}
+                          {(skilledMechanics[`${r.problemType}_${r.requestId}`] || skilledMechanics[r.problemType] || []).length > 0 ? (
+                            (skilledMechanics[`${r.problemType}_${r.requestId}`] || skilledMechanics[r.problemType] || []).map((m) => (
                               <option key={m.id} value={m.id}>
-                                {m.name} ({m.rating ? `★${m.rating}` : 'New'})
+                                {m.name}
+                                {m.distance != null ? ` (${m.distance.toFixed(1)} km)` : ''}
+                                {m.rating ? ` ★${m.rating}` : ' (New)'}
                               </option>
                             ))
                           ) : (

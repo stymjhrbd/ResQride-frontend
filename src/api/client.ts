@@ -11,7 +11,24 @@ const apiClient = axios.create({
 // Request interceptor to add token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().token;
+    // Get token from store or localStorage directly as backup
+    let token = useAuthStore.getState().token;
+    
+    // Sometimes store state might be stale or not rehydrated instantly
+    if (!token) {
+        const stored = localStorage.getItem('auth-storage');
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                if (parsed.state && parsed.state.token) {
+                    token = parsed.state.token;
+                }
+            } catch (e) {
+                console.error("Failed to parse auth storage", e);
+            }
+        }
+    }
+
     if (token && typeof token === "string" && token.trim() !== "") {
       config.headers.Authorization = `Bearer ${token}`;
     }

@@ -9,6 +9,7 @@ import { ServiceRequest } from './pages/ServiceRequest';
 import { Services } from './pages/Services';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminMechanics } from './pages/AdminMechanics';
+import { AdminCenters } from './pages/AdminCenters';
 import { MechanicDashboard } from './pages/MechanicDashboard';
 import { useAuthStore } from './store/authStore';
 
@@ -36,6 +37,7 @@ function App() {
           <Route path="services" element={<Services />} />
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/mechanics" element={<AdminMechanics />} />
+          <Route path="admin/centers" element={<AdminCenters />} />
           <Route path="mechanic" element={<MechanicDashboard />} />
         </Route>
       </Routes>

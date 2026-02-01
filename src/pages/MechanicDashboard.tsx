@@ -21,6 +21,7 @@ export const MechanicDashboard: React.FC = () => {
     const [jobs, setJobs] = useState<AssignedJob[]>([]);
     const [availability, setAvailability] = useState<string>('OFFLINE');
     const [isLoading, setIsLoading] = useState(true);
+    const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -48,6 +49,59 @@ export const MechanicDashboard: React.FC = () => {
         };
         fetchJobs();
     }, [isAuthenticated, user, navigate]);
+
+    const updateLocation = () => {
+        if (!navigator.geolocation) {
+            // Using alert instead of toast for now since toast import might be missing in this file scope
+            // or we can add it if needed. Assuming toast is available globally or we add import.
+            alert('Geolocation is not supported by your browser');
+            return;
+        }
+
+        setIsUpdatingLocation(true);
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                try {
+                    // Reverse geocode to get address (optional but good for display)
+                    let address = 'Unknown Location';
+                    try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                        const data = await res.json();
+                        if (data && data.display_name) address = data.display_name;
+                    } catch (e) {
+                        console.warn('Reverse geocoding failed', e);
+                    }
+
+                    await apiClient.patch('/mechanics/location', null, {
+                        params: {
+                            latitude,
+                            longitude,
+                            address
+                        }
+                    });
+
+                    // Simple success feedback
+                    const btn = document.getElementById('update-loc-btn');
+                    if (btn) btn.innerText = 'Updated!';
+                    setTimeout(() => {
+                        if (btn) btn.innerText = 'Update Location';
+                    }, 2000);
+
+                } catch (e) {
+                    console.error('Failed to update location', e);
+                    setError('Failed to sync location to server');
+                } finally {
+                    setIsUpdatingLocation(false);
+                }
+            },
+            (err) => {
+                console.error('Geolocation error', err);
+                setIsUpdatingLocation(false);
+                setError('Unable to retrieve location');
+            }
+        );
+    };
 
     const updateAvailability = async (status: string) => {
         try {
@@ -111,6 +165,22 @@ export const MechanicDashboard: React.FC = () => {
                 <h1 className="text-2xl font-bold text-gray-900">Mechanic Dashboard</h1>
 
                 <div className="flex items-center gap-2">
+                    <Button
+                        id="update-loc-btn"
+                        variant="outline"
+                        size="sm"
+                        onClick={updateLocation}
+                        disabled={isUpdatingLocation}
+                        className="mr-2"
+                    >
+                        {isUpdatingLocation ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                            <MapPin className="h-4 w-4 mr-1" />
+                        )}
+                        {isUpdatingLocation ? 'Updating...' : 'Update Location'}
+                    </Button>
+
                     <span className="text-sm font-medium text-gray-700">Status:</span>
                     <select
                         value={availability}
